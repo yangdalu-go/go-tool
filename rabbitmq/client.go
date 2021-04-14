@@ -67,7 +67,7 @@ func (rmq *RMQClient) connectToRabbit() {
 func (rmq *RMQClient) reConnector() {
 	for {
 		rabbitErr := <-rmq.closeError
-		log.Println(rabbitErr)
+		log.Println("rmq: lost connection " + rabbitErr.Error())
 		log.Println("rmq: begin to reConnect")
 		rmq.publishCh.Close()
 		rmq.consumeCh.Close()
