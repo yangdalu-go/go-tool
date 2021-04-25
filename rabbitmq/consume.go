@@ -37,3 +37,7 @@ func (rmq *RMQClient) ExchangeDelete(name string, ifUnused, noWait bool) error {
 func (rmq *RMQClient) Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error) {
 	return rmq.consumeCh.Consume(queue, consumer, autoAck, exclusive, noLocal, noWait, args)
 }
+
+func (rmq *RMQClient) Cancel(consumer string, noWait bool) error {
+	return rmq.consumeCh.Cancel(consumer, noWait)
+}
