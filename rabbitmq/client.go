@@ -8,12 +8,14 @@ import (
 )
 
 type RMQClient struct {
-	publishCh  *amqp.Channel
-	consumeCh  *amqp.Channel
-	conn       *amqp.Connection
-	uri        *amqp.URI
-	mutex      *sync.Mutex
-	closeError chan *amqp.Error
+	publishCh         *amqp.Channel
+	consumeCh         *amqp.Channel
+	conn              *amqp.Connection
+	uri               *amqp.URI
+	mutex             *sync.Mutex
+	connCloseError    chan *amqp.Error
+	pubishChCloseErr  chan *amqp.Error
+	consumeChCloseErr chan *amqp.Error
 }
 
 var isInit = false
@@ -24,13 +26,18 @@ func New(uri *amqp.URI) *RMQClient {
 	}
 
 	rmq := &RMQClient{
-		uri:        uri,
-		mutex:      new(sync.Mutex),
-		closeError: make(chan *amqp.Error),
+		uri:               uri,
+		mutex:             new(sync.Mutex),
+		connCloseError:    make(chan *amqp.Error),
+		pubishChCloseErr:  make(chan *amqp.Error),
+		consumeChCloseErr: make(chan *amqp.Error),
 	}
 
 	rmq.connectToRabbit()
-	rmq.conn.NotifyClose(rmq.closeError)
+	rmq.conn.NotifyClose(rmq.connCloseError)
+	rmq.publishCh.NotifyClose(rmq.pubishChCloseErr)
+	rmq.consumeCh.NotifyClose(rmq.consumeChCloseErr)
+
 	go rmq.reConnector()
 	return rmq
 }
@@ -59,22 +66,38 @@ func (rmq *RMQClient) connectToRabbit() {
 			time.Sleep(time.Second)
 			continue
 		}
-
 		break
 	}
 }
 
 func (rmq *RMQClient) reConnector() {
 	for {
-		rabbitErr := <-rmq.closeError
-		log.Println("rmq: lost connection " + rabbitErr.Error())
-		log.Println("rmq: begin to reConnect")
-		rmq.publishCh.Close()
-		rmq.consumeCh.Close()
-		rmq.conn.Close()
-		rmq.connectToRabbit()
-		rmq.closeError = make(chan *amqp.Error)
-		rmq.conn.NotifyClose(rmq.closeError)
-		log.Println("rmq: reConnect success")
+		select {
+		case connError := <-rmq.connCloseError:
+			log.Println("rmq: lost connection " + connError.Error())
+			log.Println("rmq: begin to reConnect")
+			rmq.publishCh.Close()
+			rmq.consumeCh.Close()
+			rmq.conn.Close()
+			rmq.connectToRabbit()
+			rmq.connCloseError = make(chan *amqp.Error)
+			rmq.conn.NotifyClose(rmq.connCloseError)
+			log.Println("rmq: reConnect success")
+		case publishChErr := <-rmq.pubishChCloseErr:
+			log.Println("rmq: publishChErr", publishChErr.Error())
+			if rmq.conn != nil {
+				rmq.publishCh, _ = rmq.conn.Channel()
+			}
+			rmq.pubishChCloseErr = make(chan *amqp.Error)
+			rmq.publishCh.NotifyClose(rmq.pubishChCloseErr)
+		case consumeChErr := <-rmq.consumeChCloseErr:
+			log.Println("rmq: consumeChErr", consumeChErr.Error())
+			if rmq.conn != nil {
+				rmq.consumeCh, _ = rmq.conn.Channel()
+			}
+			rmq.consumeChCloseErr = make(chan *amqp.Error)
+			rmq.publishCh.NotifyClose(rmq.consumeChCloseErr)
+		}
+
 	}
 }
