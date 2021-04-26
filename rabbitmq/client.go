@@ -68,6 +68,7 @@ func (rmq *RMQClient) connectToRabbit() {
 		}
 		break
 	}
+	log.Println("rmq: Connect success")
 }
 
 func (rmq *RMQClient) reConnector() {
@@ -76,13 +77,9 @@ func (rmq *RMQClient) reConnector() {
 		case connError := <-rmq.connCloseError:
 			log.Println("rmq: lost connection " + connError.Error())
 			log.Println("rmq: begin to reConnect")
-			rmq.publishCh.Close()
-			rmq.consumeCh.Close()
-			rmq.conn.Close()
 			rmq.connectToRabbit()
 			rmq.connCloseError = make(chan *amqp.Error)
 			rmq.conn.NotifyClose(rmq.connCloseError)
-			log.Println("rmq: reConnect success")
 		case publishChErr := <-rmq.pubishChCloseErr:
 			log.Println("rmq: publishChErr", publishChErr.Error())
 			if rmq.conn != nil {
@@ -98,6 +95,5 @@ func (rmq *RMQClient) reConnector() {
 			rmq.consumeChCloseErr = make(chan *amqp.Error)
 			rmq.publishCh.NotifyClose(rmq.consumeChCloseErr)
 		}
-
 	}
 }
